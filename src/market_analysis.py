@@ -200,6 +200,19 @@ def build_interpretation_text(events, reg_df, model, summary, index_name="Nasdaq
     lines.append("- R² indicates how much of the variation in return impact is explained by sentiment alone.")
     lines.append("- Even a statistically significant beta with low R² means sentiment moves the index a bit,")
     lines.append("  but most of the movement is still driven by other factors (news, macro data, noise, etc.).")
+    lines.append("Bottom line:")
+    if abs(mean_impact_pct) < 0.01:
+        lines.append("- On average, the price impact around these tweets is extremely small in economic terms.")
+    elif abs(mean_impact_pct) < 0.1:
+        lines.append("- The average impact is modest but potentially noticeable on an intraday basis.")
+    else:
+        lines.append("- The average impact is large enough to be economically meaningful.")
+
+    if p_beta < 0.05:
+        lines.append("- There is statistically significant evidence that sentiment matters for short-term moves.")
+    else:
+        lines.append("- The statistical evidence that sentiment matters is weak in this sample.")
+
 
     return "\n".join(lines)
 
@@ -362,7 +375,7 @@ plt.figure()
 plt.scatter(reg_df.get("sent_compound", []), reg_df.get("ret_post_minus_pre", []), alpha=0.6)
 plt.xlabel("Tweet sentiment (compound)")
 plt.ylabel("Return impact (post - pre) [log return]")
-plt.title("S&P 500 hourly: sentiment vs. return impact")
+plt.title("Nasdaq: sentiment vs. return impact")
 plt.grid(True, linestyle=":")
 plt.tight_layout()
 plt.savefig("Results/scatter_sentiment_vs_impact.png", dpi=160)
