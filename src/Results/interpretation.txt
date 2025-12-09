@@ -1,0 +1,31 @@
+Event study interpretation for Nasdaq Composite
+============================================================
+
+Number of tweets (events): 300
+Tweets during regular US trading hours: 107
+
+Average price impact (log returns):
+  mean(post - pre): 0.002098 ≈ 0.2098%
+Average change in volatility (post - pre): -0.001544
+
+Tweet sentiment (VADER compound):
+  mean: 0.2182, std: 0.5430
+
+Regression: return impact vs. tweet sentiment
+----------------------------------------------
+Model: ret_post_minus_pre = alpha + beta * sentiment_compound + error
+alpha: 2.514845e-03
+beta:  -1.963200e-03  (≈ -0.196320% per 1.0 sentiment unit)
+p-value(beta): 0.1606
+R²: 0.0248
+
+Interpretation of regression coefficient:
+- The estimated beta is -1.963200e-03, which is not statistically significant (p ≥ 0.10).
+- On average, more positive tweet sentiment is associated with lower post-minus-pre returns.
+- A full change of sentiment from -1.0 to +1.0 would correspond to about -0.392640% change
+  in the post-minus-pre log return, if the linear model is taken literally.
+
+Note:
+- R² indicates how much of the variation in return impact is explained by sentiment alone.
+- Even a statistically significant beta with low R² means sentiment moves the index a bit,
+  but most of the movement is still driven by other factors (news, macro data, noise, etc.).

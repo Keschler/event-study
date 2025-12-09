@@ -119,6 +119,92 @@ def compute_window_vol(px: pd.Series, t: pd.Timestamp, h: int) -> dict:
     }
     return out
 
+def build_interpretation_text(events, reg_df, model, summary, index_name="Nasdaq Composite"):
+    lines = []
+
+    n_events = summary["n_events"]
+    n_reg = summary["n_regular_hours"]
+    mean_impact = summary["mean_post_minus_pre"]          # log return
+    mean_impact_pct = mean_impact * 100                   # approx %
+    mean_vol_change = summary["mean_vol_post_minus_pre"]
+    sent_mean = summary["sentiment_compound_mean"]
+    sent_std = summary["sentiment_compound_std"]
+
+    lines.append(f"Event study interpretation for {index_name}")
+    lines.append("=" * 60)
+    lines.append("")
+    lines.append(f"Number of tweets (events): {n_events}")
+    lines.append(f"Tweets during regular US trading hours: {n_reg}")
+    lines.append("")
+    lines.append("Average price impact (log returns):")
+    lines.append(f"  mean(post - pre): {mean_impact:.6f} ≈ {mean_impact_pct:.4f}%")
+    lines.append(f"Average change in volatility (post - pre): {mean_vol_change:.6f}")
+    lines.append("")
+    lines.append("Tweet sentiment (VADER compound):")
+    lines.append(f"  mean: {sent_mean:.4f}, std: {sent_std:.4f}")
+    lines.append("")
+
+    if model is None or len(reg_df) < 5:
+        lines.append("Regression: not enough valid events to estimate a reliable relationship.")
+        return "\n".join(lines)
+
+    # Regression details
+    params = model.params
+    pvalues = model.pvalues
+    rsq = model.rsquared
+
+    # We expect X = [const, sent_compound]
+    alpha = float(params[0])
+    beta = float(params[1]) if len(params) > 1 else float("nan")
+    p_beta = float(pvalues[1]) if len(pvalues) > 1 else float("nan")
+
+    beta_pct = beta * 100  # percentage impact per 1.0 change in sentiment
+
+    lines.append("Regression: return impact vs. tweet sentiment")
+    lines.append("----------------------------------------------")
+    lines.append("Model: ret_post_minus_pre = alpha + beta * sentiment_compound + error")
+    lines.append(f"alpha: {alpha:.6e}")
+    lines.append(f"beta:  {beta:.6e}  (≈ {beta_pct:.6f}% per 1.0 sentiment unit)")
+    lines.append(f"p-value(beta): {p_beta:.4g}")
+    lines.append(f"R²: {rsq:.4f}")
+    lines.append("")
+
+    # Qualitative interpretation of beta
+    if not np.isfinite(beta):
+        lines.append("Could not interpret beta because it is NaN or infinite.")
+        return "\n".join(lines)
+
+    if p_beta < 0.01:
+        sig_text = "highly statistically significant (p < 0.01)"
+    elif p_beta < 0.05:
+        sig_text = "statistically significant at the 5% level (p < 0.05)"
+    elif p_beta < 0.1:
+        sig_text = "weakly statistically significant (p < 0.10)"
+    else:
+        sig_text = "not statistically significant (p ≥ 0.10)"
+
+    if beta > 0:
+        dir_text = "On average, more positive tweet sentiment is associated with higher post-minus-pre returns."
+    elif beta < 0:
+        dir_text = "On average, more positive tweet sentiment is associated with lower post-minus-pre returns."
+    else:
+        dir_text = "The estimated effect of sentiment on returns is essentially zero."
+
+    lines.append("Interpretation of regression coefficient:")
+    lines.append(f"- The estimated beta is {beta:.6e}, which is {sig_text}.")
+    lines.append(f"- {dir_text}")
+    lines.append(f"- A full change of sentiment from -1.0 to +1.0 would correspond to about {2*beta_pct:.6f}% change")
+    lines.append("  in the post-minus-pre log return, if the linear model is taken literally.")
+    lines.append("")
+    lines.append("Note:")
+    lines.append("- R² indicates how much of the variation in return impact is explained by sentiment alone.")
+    lines.append("- Even a statistically significant beta with low R² means sentiment moves the index a bit,")
+    lines.append("  but most of the movement is still driven by other factors (news, macro data, noise, etc.).")
+
+    return "\n".join(lines)
+
+
+
 # ----------------------------
 # 1) Load tweets and sentiment
 # ----------------------------
@@ -255,6 +341,21 @@ summary = {
 }
 pd.DataFrame([summary]).to_csv("Results/event_summary.csv", index=False)
 print("Saved overall summary -> Results/event_summary.csv")
+
+# Build interpretation text (pass model or None depending on whether regression ran)
+interp_model = model if ("model" in locals() and len(reg_df) >= 5) else None
+interpretation = build_interpretation_text(events, reg_df if "reg_df" in locals() else events, interp_model, summary, index_name="Nasdaq Composite")
+
+# Print to console
+print("\n\n=== HUMAN-READABLE INTERPRETATION ===\n")
+print(interpretation)
+
+# Save to file
+with open("Results/interpretation.txt", "w") as f:
+    f.write(interpretation)
+print("Saved interpretation -> Results/interpretation.txt")
+
+
 
 # Scatter: sentiment vs. return impact
 plt.figure()
