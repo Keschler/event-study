@@ -6,10 +6,10 @@ import matplotlib.pyplot as plt
 import json
 import nltk
 import pytz
+import os
 from datetime import timezone
 from pathlib import Path
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
-
 
 
 
@@ -17,10 +17,8 @@ UTC = timezone.utc
 
 nltk.download('vader_lexicon')
 MARKET_TZ = pytz.timezone("US/Eastern")
-INDEX_SYMBOL = "^IXIC"
 
 EVENT_WINDOW_HOURS = 2
-BAR_INTERVAL = "1h"
 MARKET_OPEN_H = 9
 MARKET_OPEN_M = 30
 
@@ -28,6 +26,21 @@ MARKET_CLOSE_H = 16
 MARKET_CLOSE_M = 0
 TWEETS_JSON = "trump_repost_tweets.json"
 
+BAR_INTERVAL = "1h"
+INDEX_SYMBOL = "^IXIC"
+
+
+config = Path("config.txt")
+if config.is_file():
+    with open("config.txt", "r") as f:
+        for line in f:
+            line_array = line.split()
+            if line_array[0] == "INDEX_SYMBOL":
+                INDEX_SYMBOL = line_array[2].replace('"', "")
+            elif line_array[1] == "BAR_INTERVAL":
+                BAR_INTERVAL = line_array[2]
+
+print(INDEX_SYMBOL, BAR_INTERVAL)
 
 # ----------------------------
 # Helpers
@@ -212,7 +225,7 @@ print(f"Saved per-tweet event metrics -> events_aligned.csv  (rows: {len(events)
 # ----------------------------
 # 4) Simple regression: impact vs sentiment
 # ----------------------------
-# We'll use post-minus-pre log return as 'impact'
+# Does more positive tweet sentiment correspond to a larger positive return after the tweet relative to before
 reg_df = events.dropna(subset=["ret_post_minus_pre", "sent_compound"]).copy()
 if len(reg_df) >= 5:
     X = sm.add_constant(reg_df["sent_compound"].values)
