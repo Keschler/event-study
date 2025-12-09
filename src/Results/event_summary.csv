@@ -1,0 +1,2 @@
+n_events,n_regular_hours,mean_total_log_return,mean_post_minus_pre,mean_vol_post_minus_pre,sentiment_compound_mean,sentiment_compound_std
+300,107,-0.0016814971306474496,0.002205475127984243,-0.0015479360145215025,0.2182336666666667,0.5429977823207381
