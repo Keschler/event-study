@@ -1,0 +1,26 @@
+{
+  "scrape": {
+    "username": "trump_repost",
+    "max_posts": 500,
+    "sleep_s": 1.0,
+    "retries": 4,
+    "cookies_path": "src/cookies.json"
+  },
+  "paths": {
+    "raw_dir": "src/raw",
+    "processed_dir": "src/processed",
+    "outputs_dir": "src/outputs"
+  },
+  "market": {
+    "benchmark": "^GSPC",
+    "symbols": ["^GSPC"],
+    "bar_interval": "1h"
+  },
+  "event": {
+    "event_window": [-1, 1],
+    "estimation_window": [-120, -21],
+    "market_tz": "US/Eastern",
+    "open_time": "09:30",
+    "close_time": "16:00"
+  }
+}
