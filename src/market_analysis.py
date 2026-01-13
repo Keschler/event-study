@@ -4,7 +4,6 @@ import yfinance as yf
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import json
-import nltk
 import pytz
 import os
 from datetime import timezone
@@ -14,8 +13,6 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 
 UTC = timezone.utc
-
-nltk.download('vader_lexicon')
 MARKET_TZ = pytz.timezone("US/Eastern")
 
 EVENT_WINDOW_HOURS = 2
@@ -27,18 +24,18 @@ MARKET_CLOSE_M = 0
 TWEETS_JSON = "trump_repost_tweets.json"
 
 BAR_INTERVAL = "1h"
-INDEX_SYMBOL = "^IXIC"
+INDEX_SYMBOL = None
 
 
-config = Path("config.txt")
-if config.is_file():
-    with open("config.txt", "r") as f:
-        for line in f:
-            line_array = line.split()
-            if line_array[0] == "INDEX_SYMBOL":
-                INDEX_SYMBOL = line_array[2].replace('"', "")
-            elif line_array[1] == "BAR_INTERVAL":
-                BAR_INTERVAL = line_array[2]
+config_path = Path(__file__).resolve().parents[1] / "config.json"
+if config_path.is_file():
+    with config_path.open("r", encoding="utf-8") as f:
+        config_data = json.load(f)
+    INDEX_SYMBOL = config_data.get("market", {}).get("benchmark")
+    BAR_INTERVAL = config_data.get("market", {}).get("bar_interval", BAR_INTERVAL)
+
+if INDEX_SYMBOL is None:
+    raise ValueError("INDEX_SYMBOL must be set via config.json market.benchmark.")
 
 print(INDEX_SYMBOL, BAR_INTERVAL)
 
@@ -247,10 +244,20 @@ def clean_text(text: str) -> str:
     text = re.sub(r"[^A-Za-z0-9\s']", " ", text)
     return " ".join(text.split())
 
+def get_vader_analyzer() -> SentimentIntensityAnalyzer:
+    try:
+        return SentimentIntensityAnalyzer()
+    except LookupError:
+        import nltk
+
+        nltk.download("vader_lexicon")
+        return SentimentIntensityAnalyzer()
+
+
 tweets["cleaned"] = tweets["content"].apply(clean_text)
 
 # VADER sentiment
-an = SentimentIntensityAnalyzer()
+an = get_vader_analyzer()
 scores = tweets["cleaned"].apply(lambda s: an.polarity_scores(s))
 tweets["sent_pos"] = scores.apply(lambda d: d["pos"])
 tweets["sent_neg"] = scores.apply(lambda d: d["neg"])
@@ -396,5 +403,3 @@ plt.close()
 print("Saved chart -> Results/hist_event_impacts.png")
 
 print("Done.")
-
-
