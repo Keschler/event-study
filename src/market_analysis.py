@@ -15,7 +15,12 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 UTC = timezone.utc
 
-nltk.download('vader_lexicon')
+# Download VADER lexicon only if needed
+try:
+    SentimentIntensityAnalyzer()
+except LookupError:
+    nltk.download('vader_lexicon')
+
 MARKET_TZ = pytz.timezone("US/Eastern")
 
 EVENT_WINDOW_HOURS = 2
@@ -27,7 +32,7 @@ MARKET_CLOSE_M = 0
 TWEETS_JSON = "trump_repost_tweets.json"
 
 BAR_INTERVAL = "1h"
-INDEX_SYMBOL = "^IXIC"
+INDEX_SYMBOL = None  # Will be set from config.txt
 
 
 config = Path("config.txt")
@@ -37,8 +42,11 @@ if config.is_file():
             line_array = line.split()
             if line_array[0] == "INDEX_SYMBOL":
                 INDEX_SYMBOL = line_array[2].replace('"', "")
-            elif line_array[1] == "BAR_INTERVAL":
+            elif line_array[0] == "BAR_INTERVAL":
                 BAR_INTERVAL = line_array[2]
+
+if INDEX_SYMBOL is None:
+    INDEX_SYMBOL = "^IXIC"  # Default if not set in config
 
 print(INDEX_SYMBOL, BAR_INTERVAL)
 
