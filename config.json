@@ -1,0 +1,30 @@
+{
+  "scrape": {
+    "username": "trump_repost",
+    "max_posts": 500,
+    "cookies_path": "src/cookies.json",
+    "sleep_seconds": 1,
+    "max_retries": 3
+  },
+  "paths": {
+    "raw_dir": "raw",
+    "processed_dir": "processed",
+    "outputs_dir": "outputs"
+  },
+  "market": {
+    "benchmark": "^GSPC",
+    "symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"],
+    "bar_interval": "1h",
+    "index_symbol": "^NDX"
+  },
+  "event": {
+    "event_window": [-1, 1],
+    "estimation_window": [-120, -21],
+    "market_tz": "US/Eastern",
+    "market_open_hour": 9,
+    "market_open_minute": 30,
+    "market_close_hour": 16,
+    "market_close_minute": 0,
+    "event_window_hours": 2
+  }
+}
