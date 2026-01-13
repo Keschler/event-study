@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
+
+if __package__ in (None, ""):
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from src.config import load_config
 from src.dedupe import merge_dedupe
