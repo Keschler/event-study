@@ -10,15 +10,15 @@ import pandas as pd
 if __package__ in (None, ""):
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from src.config import load_config
-from src.dedupe import merge_dedupe
-from src.event_align import assign_event_day
-from src.event_study import build_windows, compute_ar_car, fit_market_model
-from src.io_raw import write_raw_dump
-from src.market_data import compute_daily_returns, download_daily_prices
-from src.report import summarize_car, write_report
-from src.scrape_x import scrape_user_posts
-from src.textproc import add_vader_sentiment, clean_text
+from src.analysis.event_align import assign_event_day
+from src.analysis.event_study import build_windows, compute_ar_car, fit_market_model
+from src.data.io_raw import write_raw_dump
+from src.data.market_data import compute_daily_returns, download_daily_prices
+from src.reporting.report import summarize_car, write_report
+from src.scraping.scrape_x import scrape_user_posts
+from src.settings.config import load_config
+from src.utils.dedupe import merge_dedupe
+from src.utils.textproc import add_vader_sentiment, clean_text
 
 
 def _ensure_dirs(*dirs: str) -> None:
@@ -107,6 +107,16 @@ def run_scrape(config: dict) -> Path:
         scrape_cfg["cookies_path"],
         sleep_s=float(scrape_cfg.get("sleep_s", 1.0)),
         retries=int(scrape_cfg.get("retries", 4)),
+        page_sleep_s=float(scrape_cfg.get("page_sleep_s", scrape_cfg.get("sleep_s", 1.0))),
+        page_size=int(scrape_cfg.get("page_size", 70)),
+        min_request_interval_s=float(
+            scrape_cfg.get(
+                "min_request_interval_s",
+                max(1.0, float(scrape_cfg.get("sleep_s", 1.0))),
+            )
+        ),
+        max_rate_limit_hits=int(scrape_cfg.get("max_rate_limit_hits", 5)),
+        stop_on_rate_limit=bool(scrape_cfg.get("stop_on_rate_limit", False)),
     )
     print(posts)
 

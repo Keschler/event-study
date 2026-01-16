@@ -27,7 +27,7 @@ BAR_INTERVAL = "1h"
 INDEX_SYMBOL = None
 
 
-config_path = Path(__file__).resolve().parents[1] / "config.json"
+config_path = Path(__file__).resolve().parents[2] / "config.json"
 if config_path.is_file():
     with config_path.open("r", encoding="utf-8") as f:
         config_data = json.load(f)
