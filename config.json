@@ -3,6 +3,11 @@
     "username": "trump_repost",
     "max_posts": 500,
     "sleep_s": 1.0,
+    "page_sleep_s": 2.0,
+    "page_size": 50,
+    "min_request_interval_s": 2.0,
+    "max_rate_limit_hits": 5,
+    "stop_on_rate_limit": false,
     "retries": 4,
     "cookies_path": "src/cookies.json",
     "skip": false
