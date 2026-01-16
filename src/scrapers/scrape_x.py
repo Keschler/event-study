@@ -7,7 +7,14 @@ from twikit import Client
 from twikit.errors import TooManyRequests
 
 
-async def _run_with_retry(task, retries: int, sleep_s: float, *, max_wait_s: float = 3600.0):
+async def _run_with_retry(
+    task,
+    retries: int,
+    sleep_s: float,
+    *,
+    max_wait_s: float = 3600.0,
+    max_rate_limit_hits: int = 5,
+):
     attempt = 0
     rate_limit_hits = 0
 
@@ -35,9 +42,17 @@ async def _run_with_retry(task, retries: int, sleep_s: float, *, max_wait_s: flo
             print(f"[rate-limit] 429 hit; sleeping {wait_s:.1f}s (hit #{rate_limit_hits})")
             await asyncio.sleep(wait_s)
 
+            if wait_s > max_wait_s:
+                raise RuntimeError(
+                    "Rate limit wait exceeds configured maximum. "
+                    "Try lowering max_posts, increasing sleep_s, or retry later."
+                ) from e
+
             # Wenn du ewig in 429 läufst, irgendwann abbrechen statt unendlich zu warten:
-            if rate_limit_hits >= 5 and reset is None:
-                raise
+            if rate_limit_hits >= max_rate_limit_hits and reset is None:
+                raise RuntimeError(
+                    "Rate limit hit too many times without reset info. Retry later."
+                ) from e
 
             # Nicht attempt++ für 429 (du willst nicht “schneller sterben”, sondern korrekt warten)
             continue
@@ -73,22 +88,38 @@ async def _scrape_async(
     cookies_path: str,
     sleep_s: float,
     retries: int,
+    rate_limit_max_wait_s: float,
+    rate_limit_max_hits: int,
 ) -> list[dict[str, Any]]:
     client = Client("en-US")
     client.load_cookies(cookies_path)
 
-    user = await _run_with_retry(
-        lambda: client.get_user_by_screen_name(username), retries, sleep_s
-    )
+    try:
+        user = await _run_with_retry(
+            lambda: client.get_user_by_screen_name(username),
+            retries,
+            sleep_s,
+            max_wait_s=rate_limit_max_wait_s,
+            max_rate_limit_hits=rate_limit_max_hits,
+        )
+    except RuntimeError as exc:
+        print(f"[rate-limit] {exc}")
+        return []
     user_id = user.id
 
     posts: list[dict[str, Any]] = []
 
-    result = await _run_with_retry(
-        lambda: client.get_user_tweets(user_id, "Tweets", count=min(70, max_posts)),
-        retries,
-        sleep_s,
-    )
+    try:
+        result = await _run_with_retry(
+            lambda: client.get_user_tweets(user_id, "Tweets", count=min(70, max_posts)),
+            retries,
+            sleep_s,
+            max_wait_s=rate_limit_max_wait_s,
+            max_rate_limit_hits=rate_limit_max_hits,
+        )
+    except RuntimeError as exc:
+        print(f"[rate-limit] {exc}")
+        return posts
 
     while True:
         for tweet in result:
@@ -101,7 +132,16 @@ async def _scrape_async(
         if len(posts) >= max_posts:
             break
         try:
-            result = await _run_with_retry(lambda: result.next(), retries, sleep_s)
+            result = await _run_with_retry(
+                lambda: result.next(),
+                retries,
+                sleep_s,
+                max_wait_s=rate_limit_max_wait_s,
+                max_rate_limit_hits=rate_limit_max_hits,
+            )
+        except RuntimeError as exc:
+            print(f"[rate-limit] {exc}")
+            break
         except Exception:
             break
         await asyncio.sleep(sleep_s)
@@ -115,7 +155,17 @@ def scrape_user_posts(
     cookies_path: str,
     sleep_s: float = 1.0,
     retries: int = 4,
+    rate_limit_max_wait_s: float = 300.0,
+    rate_limit_max_hits: int = 3,
 ) -> list[dict[str, Any]]:
     return asyncio.run(
-        _scrape_async(username, max_posts, cookies_path, sleep_s, retries)
+        _scrape_async(
+            username,
+            max_posts,
+            cookies_path,
+            sleep_s,
+            retries,
+            rate_limit_max_wait_s,
+            rate_limit_max_hits,
+        )
     )

@@ -10,15 +10,15 @@ import pandas as pd
 if __package__ in (None, ""):
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from src.analysis.event_align import assign_event_day
+from src.analysis.event_study import build_windows, compute_ar_car, fit_market_model
+from src.analysis.market_data import compute_daily_returns, download_daily_prices
+from src.analysis.report import summarize_car, write_report
 from src.config import load_config
-from src.dedupe import merge_dedupe
-from src.event_align import assign_event_day
-from src.event_study import build_windows, compute_ar_car, fit_market_model
-from src.io_raw import write_raw_dump
-from src.market_data import compute_daily_returns, download_daily_prices
-from src.report import summarize_car, write_report
-from src.scrape_x import scrape_user_posts
-from src.textproc import add_vader_sentiment, clean_text
+from src.data.dedupe import merge_dedupe
+from src.data.io_raw import write_raw_dump
+from src.scrapers.scrape_x import scrape_user_posts
+from src.text.textproc import add_vader_sentiment, clean_text
 
 
 def _ensure_dirs(*dirs: str) -> None:
@@ -107,6 +107,8 @@ def run_scrape(config: dict) -> Path:
         scrape_cfg["cookies_path"],
         sleep_s=float(scrape_cfg.get("sleep_s", 1.0)),
         retries=int(scrape_cfg.get("retries", 4)),
+        rate_limit_max_wait_s=float(scrape_cfg.get("rate_limit_max_wait_s", 300.0)),
+        rate_limit_max_hits=int(scrape_cfg.get("rate_limit_max_hits", 3)),
     )
     print(posts)
 
