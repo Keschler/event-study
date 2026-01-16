@@ -1,0 +1,34 @@
+# Core utilities
+pandas>=2.2.0
+numpy>=1.26.0
+pyyaml>=6.0
+tqdm>=4.66.0
+python-dateutil>=2.9.0
+
+# Web
+requests>=2.32.0
+snscrape>=0.7.0.2
+
+# Finance / market data
+yfinance>=0.2.40
+pandas-datareader>=0.10.0
+
+# NLP and sentiment
+vaderSentiment>=3.3.2
+nltk>=3.9
+# optional: more advanced financial sentiment model
+# transformers>=4.44.0
+# torch>=2.4.0
+
+# Statistics and analysis
+scipy>=1.13.0
+statsmodels>=0.14.0
+
+# File formats
+pyarrow>=17.0.0
+
+# Testing and linting
+pytest>=8.3.0
+black>=24.8.0
+
+

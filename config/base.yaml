@@ -1,0 +1,21 @@
+paths:
+  data_raw: "data/raw"
+  data_interim: "data/interim"
+  data_processed: "data/processed"
+
+assets:
+  benchmark: "^GSPC"       # S&P 500 (use "^" for indices in yfinance)
+  symbols: ["^GSPC"]       # start minimal; add tickers later
+
+scrape:
+  source: "truthsocial"        # or "news"
+  handle: "realDonaldTrump"
+  max_items: 500
+
+nlp:
+  keywords: ["tariff", "china", "oil", "rate", "fed", "deal", "sanction"]
+
+event:
+  est_window_days: 120     # estimation window for expected returns
+  event_window: [-1, 1]    # event-day window for CAR
+  market_tz: "America/New_York"

@@ -4,7 +4,8 @@
     "max_posts": 500,
     "sleep_s": 1.0,
     "retries": 4,
-    "cookies_path": "src/cookies.json"
+    "cookies_path": "src/cookies.json",
+    "skip": false
   },
   "paths": {
     "raw_dir": "src/raw",
@@ -13,7 +14,7 @@
   },
   "market": {
     "benchmark": "^GSPC",
-    "symbols": ["^GSPC"],
+    "symbols": ["TSLA", "AAPL"],
     "bar_interval": "1h"
   },
   "event": {
@@ -21,6 +22,7 @@
     "estimation_window": [-120, -21],
     "market_tz": "US/Eastern",
     "open_time": "09:30",
-    "close_time": "16:00"
+    "close_time": "16:00",
+    "min_est_days": 30
   }
 }

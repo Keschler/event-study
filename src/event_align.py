@@ -48,7 +48,11 @@ def assign_event_day(
         return day
 
     output = posts_df.copy()
-    output["date_utc"] = pd.to_datetime(output["created_at"], utc=True, errors="coerce")
+    if "date_utc" in output.columns:
+        output["date_utc"] = pd.to_datetime(output["date_utc"], utc=True, errors="coerce")
+    else:
+        output["date_utc"] = pd.to_datetime(output["created_at"], utc=True, errors="coerce")
+
     output["event_day"] = output["date_utc"].apply(assign)
     output["event_day"] = output["event_day"].dt.date
     return output

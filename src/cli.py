@@ -25,7 +25,61 @@ def _ensure_dirs(*dirs: str) -> None:
     for directory in dirs:
         Path(directory).mkdir(parents=True, exist_ok=True)
 
+def _coalesce(d: dict, *keys: str, default=None):
+    for k in keys:
+        if k in d and d[k] not in (None, ""):
+            return d[k]
+    return default
 
+
+def _posts_to_df(posts: list[dict]) -> pd.DataFrame:
+    rows = []
+    for p in posts:
+        if not isinstance(p, dict):
+            continue
+
+        # Some exports wrap the actual tweet in "tweet": {...}
+        base = p.get("tweet") if isinstance(p.get("tweet"), dict) else p
+
+        text = _coalesce(
+            base,
+            "text",
+            "full_text",
+            "content",
+            "rawContent",
+            "renderedContent",
+            "body",
+            "message",
+        )
+        created = _coalesce(base, "created_at", "createdAt", "date", "datetime", "timestamp", "time")
+        tid = _coalesce(base, "id", "id_str", "tweet_id", "tweetId", "status_id")
+        url = _coalesce(base, "url", "tweet_url", "permalink", "link")
+
+        user = base.get("user")
+        if isinstance(user, dict):
+            user = _coalesce(user, "username", "screen_name", "handle", "name")
+        if user is None:
+            user = _coalesce(base, "username", "screen_name", "handle", "user_name")
+
+        if url is None and user and tid:
+            url = f"https://x.com/{user}/status/{tid}"
+
+        rows.append(
+            {
+                "id": str(tid) if tid is not None else None,
+                "created_at": created,
+                "url": url,
+                "user": user,
+                "text": text,
+            }
+        )
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.dropna(subset=["text"], how="all")
+    return df
+
+        
 def _load_json(path: Path) -> list[dict]:
     if not path.is_file():
         return []
@@ -37,6 +91,16 @@ def run_scrape(config: dict) -> Path:
     scrape_cfg = config["scrape"]
     paths_cfg = config["paths"]
 
+    merged_path = Path(paths_cfg["processed_dir"]) / f"{scrape_cfg['username']}_merged.json"
+    existing_posts = _load_json(merged_path)
+
+    # Skip if configured OR we already have data
+    #skip_cfg = bool(scrape_cfg.get("skip", False))
+    #if skip_cfg or len(existing_posts) > 0:
+    #    print(f"Skipping scrape (skip={skip_cfg}, merged_count={len(existing_posts)})")
+    #    return merged_path
+
+    # Otherwise: scrape
     posts = scrape_user_posts(
         scrape_cfg["username"],
         int(scrape_cfg["max_posts"]),
@@ -44,11 +108,10 @@ def run_scrape(config: dict) -> Path:
         sleep_s=float(scrape_cfg.get("sleep_s", 1.0)),
         retries=int(scrape_cfg.get("retries", 4)),
     )
+    print(posts)
 
     raw_path = write_raw_dump(paths_cfg["raw_dir"], scrape_cfg["username"], posts)
 
-    merged_path = Path(paths_cfg["processed_dir"]) / f"{scrape_cfg['username']}_merged.json"
-    existing_posts = _load_json(merged_path)
     merged = merge_dedupe(existing_posts, posts)
 
     ids = [post.get("id") for post in merged if post.get("id")]
@@ -68,7 +131,7 @@ def run_process(config: dict) -> Path:
 
     merged_path = Path(paths_cfg["processed_dir"]) / f"{scrape_cfg['username']}_merged.json"
     posts = _load_json(merged_path)
-    df = pd.DataFrame(posts)
+    df = _posts_to_df(posts)
     if df.empty:
         raise ValueError("No merged posts available to process.")
 
@@ -99,16 +162,32 @@ def run_process(config: dict) -> Path:
 def run_market(config: dict, posts_df: pd.DataFrame) -> tuple[Path, Path, pd.DataFrame]:
     paths_cfg = config["paths"]
     market_cfg = config["market"]
+    event_cfg = config["event"]
 
     symbols = list(dict.fromkeys([market_cfg["benchmark"], *market_cfg["symbols"]]))
-    start = posts_df["date_utc"].min().date().isoformat()
-    end = (posts_df["date_utc"].max() + pd.Timedelta(days=1)).date().isoformat()
+
+    # Need enough history BEFORE the earliest event for the estimation window
+    est_win = tuple(event_cfg["estimation_window"])  # e.g. [-120, -20]
+
+    lookback_trading_days = abs(int(est_win[0])) + 10
+    # rough trading->calendar conversion (~252 trading days/year)
+    lookback_calendar_days = int(lookback_trading_days * 1.6)
+
+    start = (posts_df["date_utc"].min() - pd.Timedelta(days=lookback_calendar_days)).date().isoformat()
+    end = (posts_df["date_utc"].max() + pd.Timedelta(days=10)).date().isoformat()
 
     prices = download_daily_prices(symbols, start=start, end=end)
     if prices.empty:
         raise ValueError("No market data returned from yfinance.")
 
     returns = compute_daily_returns(prices, benchmark_symbol=market_cfg["benchmark"])
+    if returns.shape[0] < 60:
+        raise ValueError(f"Not enough trading days for study (have {returns.shape[0]}). Increase lookback.")
+    if returns.shape[1] < 2:
+        raise ValueError(
+            f"Need benchmark + at least 1 symbol. Got columns={list(returns.columns)}. "
+            "Fix config.market.symbols."
+        )
 
     returns = returns.copy()
     returns.index.name = "date"
@@ -166,8 +245,11 @@ def run_study(config: dict, aligned_df: pd.DataFrame, returns: pd.DataFrame) -> 
             evt_win=event_window,
         )
 
-        if len(est_days) < 60:
+
+        min_est = int(event_cfg.get("min_est_days", 30))
+        if len(est_days) < min_est:
             continue
+
 
         for symbol in market_cfg["symbols"]:
             if symbol == market_cfg["benchmark"]:
@@ -200,7 +282,13 @@ def run_study(config: dict, aligned_df: pd.DataFrame, returns: pd.DataFrame) -> 
                 }
             )
 
-    results_df = pd.DataFrame(event_results)
+
+    cols = [
+    "event_id","event_day","symbol","car","ar_-1","ar_0","ar_+1",
+    "alpha","beta","resid_var","n_est"
+]
+    results_df = pd.DataFrame(event_results, columns=cols)
+
     output_path = Path(paths_cfg["outputs_dir"]) / "event_results.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(output_path, index=False)
@@ -209,8 +297,15 @@ def run_study(config: dict, aligned_df: pd.DataFrame, returns: pd.DataFrame) -> 
 
 def run_report(config: dict, event_results_path: Path) -> Path:
     paths_cfg = config["paths"]
-    df = pd.read_csv(event_results_path)
-    summary = summarize_car(df)
+    try:
+        df = pd.read_csv(event_results_path)
+    except pd.errors.EmptyDataError:
+        df = pd.DataFrame()
+
+    if df.empty:
+        summary = {"note": "No event-study rows produced (event_results.csv empty). Check estimation window / data coverage."}
+    else:
+        summary = summarize_car(df)
     output_path = Path(paths_cfg["outputs_dir"]) / "report.json"
     write_report(str(output_path), summary)
     print(json.dumps(summary, indent=2))
@@ -222,7 +317,11 @@ def run_all(config_path: str) -> None:
     paths_cfg = config["paths"]
     _ensure_dirs(paths_cfg["raw_dir"], paths_cfg["processed_dir"], paths_cfg["outputs_dir"])
 
-    run_scrape(config)
+    if not config.get("scrape", {}).get("skip", False):
+        run_scrape(config)
+    else:
+        print("Skipping scrape (scrape.skip=true)")
+
 
     cleaned_path = run_process(config)
     posts_df = pd.read_csv(cleaned_path, parse_dates=["date_utc"])

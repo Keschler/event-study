@@ -1,0 +1,9 @@
+"scrape": {
+  "username": "trump_repost",
+  "max_posts": 200,
+  "cookies_path": "cookies.json",
+  "sleep_s": 2.0,
+  "retries": 4,
+  "skip": true
+}
+
