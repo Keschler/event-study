@@ -4,6 +4,10 @@
     "max_posts": 500,
     "sleep_s": 1.0,
     "retries": 4,
+    "page_size": 40,
+    "min_request_interval_s": 2.5,
+    "max_wait_s": 3600,
+    "max_rate_limit_hits": 5,
     "cookies_path": "src/cookies.json",
     "skip": false
   },

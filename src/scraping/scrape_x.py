@@ -1,13 +1,21 @@
 import asyncio
 import random
+import time
+from dataclasses import dataclass
 from datetime import timezone
 from typing import Any
-import time
 from twikit import Client
 from twikit.errors import TooManyRequests
 
 
-async def _run_with_retry(task, retries: int, sleep_s: float, *, max_wait_s: float = 3600.0):
+async def _run_with_retry(
+    task,
+    retries: int,
+    sleep_s: float,
+    *,
+    max_wait_s: float = 3600.0,
+    max_rate_limit_hits: int = 5,
+):
     attempt = 0
     rate_limit_hits = 0
 
@@ -36,7 +44,7 @@ async def _run_with_retry(task, retries: int, sleep_s: float, *, max_wait_s: flo
             await asyncio.sleep(wait_s)
 
             # Wenn du ewig in 429 läufst, irgendwann abbrechen statt unendlich zu warten:
-            if rate_limit_hits >= 5 and reset is None:
+            if rate_limit_hits >= max_rate_limit_hits and reset is None:
                 raise
 
             # Nicht attempt++ für 429 (du willst nicht “schneller sterben”, sondern korrekt warten)
@@ -67,27 +75,55 @@ def _tweet_to_dict(tweet) -> dict[str, Any]:
     }
 
 
+@dataclass
+class _RequestThrottle:
+    min_interval_s: float
+    last_call: float = 0.0
+
+    async def wait(self) -> None:
+        if self.min_interval_s <= 0:
+            return
+        now = time.time()
+        remaining = self.min_interval_s - (now - self.last_call)
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+        self.last_call = time.time()
+
+
 async def _scrape_async(
     username: str,
     max_posts: int,
     cookies_path: str,
     sleep_s: float,
     retries: int,
+    page_size: int,
+    min_request_interval_s: float,
+    max_wait_s: float,
+    max_rate_limit_hits: int,
 ) -> list[dict[str, Any]]:
     client = Client("en-US")
     client.load_cookies(cookies_path)
+    throttle = _RequestThrottle(min_interval_s=min_request_interval_s)
 
+    await throttle.wait()
     user = await _run_with_retry(
-        lambda: client.get_user_by_screen_name(username), retries, sleep_s
+        lambda: client.get_user_by_screen_name(username),
+        retries,
+        sleep_s,
+        max_wait_s=max_wait_s,
+        max_rate_limit_hits=max_rate_limit_hits,
     )
     user_id = user.id
 
     posts: list[dict[str, Any]] = []
 
+    await throttle.wait()
     result = await _run_with_retry(
-        lambda: client.get_user_tweets(user_id, "Tweets", count=min(70, max_posts)),
+        lambda: client.get_user_tweets(user_id, "Tweets", count=min(page_size, max_posts)),
         retries,
         sleep_s,
+        max_wait_s=max_wait_s,
+        max_rate_limit_hits=max_rate_limit_hits,
     )
 
     while True:
@@ -101,7 +137,14 @@ async def _scrape_async(
         if len(posts) >= max_posts:
             break
         try:
-            result = await _run_with_retry(lambda: result.next(), retries, sleep_s)
+            await throttle.wait()
+            result = await _run_with_retry(
+                lambda: result.next(),
+                retries,
+                sleep_s,
+                max_wait_s=max_wait_s,
+                max_rate_limit_hits=max_rate_limit_hits,
+            )
         except Exception:
             break
         await asyncio.sleep(sleep_s)
@@ -115,7 +158,21 @@ def scrape_user_posts(
     cookies_path: str,
     sleep_s: float = 1.0,
     retries: int = 4,
+    page_size: int = 40,
+    min_request_interval_s: float = 2.5,
+    max_wait_s: float = 3600.0,
+    max_rate_limit_hits: int = 5,
 ) -> list[dict[str, Any]]:
     return asyncio.run(
-        _scrape_async(username, max_posts, cookies_path, sleep_s, retries)
+        _scrape_async(
+            username,
+            max_posts,
+            cookies_path,
+            sleep_s,
+            retries,
+            page_size,
+            min_request_interval_s,
+            max_wait_s,
+            max_rate_limit_hits,
+        )
     )
